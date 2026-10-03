@@ -1,5 +1,13 @@
 import OpenAI from "openai";
-import { autoResizeTextarea, checkEnvironment, setLoading } from "./utils.js";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
+import {
+  checkEnvironment,
+  autoResizeTextarea,
+  setLoading,
+  showStream,
+} from "./utils.js";
+
 checkEnvironment();
 
 // Initialize an OpenAI client for your provider using env vars
@@ -14,23 +22,24 @@ const giftForm = document.getElementById("gift-form");
 const userInput = document.getElementById("user-input");
 const outputContent = document.getElementById("output-content");
 
-function start() {
-  // Setup UI event listeners
-  userInput.addEventListener("input", () => autoResizeTextarea(userInput));
-  giftForm.addEventListener("submit", handleGiftRequest);
-}
-
 // Initialize messages array with system prompt
 const messages = [
   {
     role: "system",
     content: `You are the Gift Genie!
     Make your gift suggestions thoughtful and practical.
+    The user will describe the gift's recipient. 
     Your response must be under 100 words. 
     Skip intros and conclusions. 
     Only output gift suggestions.`,
   },
 ];
+
+function start() {
+  // Setup UI event listeners
+  userInput.addEventListener("input", () => autoResizeTextarea(userInput));
+  giftForm.addEventListener("submit", handleGiftRequest);
+}
 
 async function handleGiftRequest(e) {
   // Prevent default form submission
@@ -40,51 +49,71 @@ async function handleGiftRequest(e) {
   const userPrompt = userInput.value.trim();
   if (!userPrompt) return;
 
-  /**
-    * Challenge: Basic Error Handling
-    *
-    * Right now, if the AI request fails,
-    * the app will silently break.
-    *
-    * Your task:
-    *
-    * 1. Wrap the AI request in a try/catch block
-    * 2. If an error occurs:
-    *    - Log the error to the console
-    *    - Show a friendly message in the UI
-    * 3. Ensure loading always stops
-    *
-    * 💡 Check the hints folder for additional guidance!
-    */
-
-  // Set loading state
+  // Set loading state (hides output, animates lamp)
   setLoading(true);
 
-  messages.push({
-    role: 'user',
-    content: userPrompt
-  });
+  // Add user message to global messages array
+  messages.push({ role: "user", content: userPrompt });
+
+  /**
+   * Challenge: Stream Gift Genie Responses
+   *
+   * You're starting with:
+   * - A working Gift Genie app from the previous lesson
+   * - A non-streaming chat completion request
+   *
+   * Your task:
+   *
+   * 1. Enable streaming by adding stream: true to the request
+   * 2. Loop over the stream using for await...of syntax
+   * 3. Extract content from each chunk
+   * 4. Accumulate streamed text chunks into a single string
+   * 5. Convert that accumulated Markdown into HTML
+   * 6. Sanitize the HTML
+   * 7. Render it progressively as the stream updates
+   *
+   * 💡 Check the hints folder for additional guidance
+   */
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-50",
-      messages: messages,
-      stream: false
+    // Send a chat completions request and await its response
+    const stream = await openai.chat.completions.create({
+      model: process.env.AI_MODEL,
+      messages,
+      stream: true
     });
 
-    if (response.choices && response.choices.length > 0) {
-      const giftSuggestions = response.choices[0].message.content;
-      outputContent.textContent = giftSuggestions;
+    // Show output container immediately for streaming feedback
+    showStream();
+
+    let giftSuggestions = "";
+    // Extract gift suggestions from the assistant message's content
+    for await (const chunk of stream) {
+
+      const content = chunk.choices?.[0]?.delta?.content;
+      giftSuggestions += content;
+
+      // Convert Markdown to HTML
+      const html = marked.parse(giftSuggestions);
+
+      // Sanitize the HTML
+      const safeHTML = DOMPurify.sanitize(html);
+
+      // Display the sanitized HTML
+      outputContent.innerHTML = safeHTML;
     }
-  } catch (error) {
-    outputContent.textContent = "Sorry! something went wrong."
-    console.log("error");
+
+  } catch (err) {
+    // Log the error for debugging
+    console.error(err);
+
+    // Display friendly error message
+    outputContent.textContent =
+      "Sorry, I can't access what I need right now. Please try again in a bit.";
   } finally {
+    // Always clear loading state (shows output, resets lamp)
     setLoading(false);
   }
-
-  // Clear loading state
-  setLoading(false);
 }
 
 start();
