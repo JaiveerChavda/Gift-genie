@@ -226,13 +226,13 @@ async function handleGiftRequest(e) {
       giftSuggestions += content;
 
       // Convert Markdown to HTML
-      // const html = marked.parse(giftSuggestions);
+      const html = marked.parse(giftSuggestions);
 
       // Sanitize the HTML
-      // const safeHTML = DOMPurify.sanitize(html);
+      const safeHTML = DOMPurify.sanitize(html);
 
       // Display the sanitized HTML
-      outputContent.innerHTML = giftSuggestions;
+      outputContent.innerHTML = safeHTML;
     }
 
   } catch (err) {
