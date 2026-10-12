@@ -46,13 +46,13 @@ app.post('/api/gift',async (req, res) => {
     });
 
     try {
+
         const response = await openai.chat.completions.create({
             model: process.env.AI_MODEL,
             messages
         });
 
         const giftSuggestions = response.choices[0].message.content;
-        console.log(giftSuggestions)
         res.json({giftSuggestions})
     } catch (error) {
         console.error(e);

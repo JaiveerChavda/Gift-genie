@@ -108,7 +108,7 @@ async function handleGiftRequest(e) {
 
   } catch (error) {
     // Log the error for debugging
-    console.error(error); 
+    console.error(error.message); 
 
     // Display friendly error message
     outputContent.textContent =
