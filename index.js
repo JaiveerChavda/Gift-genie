@@ -89,7 +89,7 @@ async function handleGiftRequest(e) {
 
     const response = await fetch('http://localhost:3000/api/gift', {
       headers: {
-        "Content-Type": "application/json" // 2. Set the content type
+        "Content-Type": "application/json"
       },
       method: "POST",
       body: JSON.stringify({ userPrompt })
