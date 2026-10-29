@@ -45,35 +45,6 @@ function start() {
  * the model’s new capabilities.
  */
 
-const systemPrompt = `You are the Gift Genie that can search the web! 
-
-You generate gift ideas that feel thoughtful, specific, and genuinely useful.
-Your output must be in structured Markdown.
-Do not write introductions or conclusions.
-Start directly with the gift suggestions.
-
-Each gift must:
-- Have a clear heading with the actual product's name
-- Include a short explanation of why it works
-- Include the current price or a price range
-- Include one or more links to websites or social media business pages
-where the gift can be bought
-
-Prefer products that are widely available and well-reviewed.
-If you can't find a working link, say so rather than guessing.
-
-If the user mentions a location, situation, or constraint,
-adapt the gift ideas and add another short section 
-under each gift that guides the user to get the gift in that 
-constrained context.
-
-After the gift ideas, include a section titled "Questions for you"
-with clarifying questions that would help improve the recommendations.
-
-Finish with a section with H2 heading titled "Wanna browse yourself?"
-with links to various ecommerce sites with relevant search queries and filters 
-already applied.`;
-
 async function handleGiftRequest(e) {
   // Prevent default form submission
   e.preventDefault();
@@ -85,8 +56,6 @@ async function handleGiftRequest(e) {
   setLoading(true);
 
   try {
-    // Send a chat completions request and await its response
-
     const response = await fetch('http://localhost:3000/api/gift', {
       headers: {
         "Content-Type": "application/json"
@@ -95,16 +64,41 @@ async function handleGiftRequest(e) {
       body: JSON.stringify({ userPrompt })
     });
 
-    const data = await response.json();
-
     if(! response.ok){
-      throw new Error(data.message)
+      const data = await response.json();
+      throw new Error(data.message);
     }
 
     showStream();
-    const html = marked.parse(data.giftSuggestions);
-    const safeHTML = DOMPurify.sanitize(html);
-    outputContent.innerHTML = safeHTML
+
+    if (!response.body) throw new Error("Streaming is not supported by this browser.");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let streamedText = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+      const events = buffer.split('\n\n');
+      buffer = events.pop();
+
+      for (const event of events) {
+        const line = event.split('\n').find((line) => line.startsWith('data: '));
+        if (!line) continue;
+
+        const payload = line.slice(6);
+        if (payload === '[DONE]') continue;
+
+        const { delta } = JSON.parse(payload);
+        streamedText += delta;
+        outputContent.innerHTML = DOMPurify.sanitize(marked.parse(streamedText));
+      }
+
+      if (done) break;
+    }
 
   } catch (error) {
     // Log the error for debugging

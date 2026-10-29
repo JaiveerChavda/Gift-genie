@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import e from 'express';
 import OpenAI from 'openai';
 
 const app = express();
@@ -49,19 +48,40 @@ app.post('/api/gift',async (req, res) => {
 
     try {
 
-        const response = await openai.responses.create({
+        // Keep the connection open and send each generated text delta immediately.
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        const stream = await openai.responses.create({
             model: process.env.AI_MODEL,
             input: userPrompt,
             tools: [{type : "web_search"}],
             instructions: systemPrompt,
-            stream: false
+            stream: true
         });
 
-        const giftSuggestions = response.output_text;
-        res.json({giftSuggestions});
+        let giftSuggestions = '';
+
+        for await(const event of stream){
+            if(event.type === "response.output_text.delta"){
+                giftSuggestions += event.delta;
+                res.write(`data: ${JSON.stringify({ delta: event.delta })}\n\n`);
+            }
+        }
+
+        res.write('data: [DONE]\n\n');
+        res.end();
+
+        // const giftSuggestions = response.output_text;
     } catch (error) {
-        console.error(e);
-        return res.status(500).json({ message: `It's not you, it's us. something went wrong on the server.` });
+        console.error(error);
+        if (!res.headersSent) {
+            return res.status(500).json({ message: `It's not you, it's us. something went wrong on the server.` });
+        }
+        res.write(`event: error\ndata: ${JSON.stringify({ message: `It's not you, it's us. something went wrong on the server.` })}\n\n`);
+        res.end();
     }
 });
 
